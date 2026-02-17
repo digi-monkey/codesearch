@@ -1,0 +1,244 @@
+# LLM Guide for CodeSearch
+
+> Technical guide for AI agents integrating with CodeSearch
+
+## Project Overview
+
+CodeSearch is an AST-based code indexing and search tool supporting TypeScript, JavaScript, and Python.
+
+**Key Capabilities:**
+- Incremental indexing (mtime + hash-based change detection)
+- Multi-language AST parsing via tree-sitter
+- Symbol extraction (functions, classes, imports, references)
+- Fast local search with structured output
+
+## Quick Start for AI Agents
+
+### 1. Basic Usage Pattern
+
+```typescript
+import { buildIndex, search } from './src/indexer.js';
+import { resolve } from 'path';
+
+// Index a project
+const projectRoot = resolve('./target-project');
+await buildIndex(projectRoot);
+
+// Search
+search(projectRoot, 'def:targetFunction');
+```
+
+### 2. Index Structure
+
+```typescript
+interface Index {
+  version: string;      // "0.3.0"
+  created: string;      // ISO timestamp
+  updated: string;      // Last update timestamp
+  symbols: Symbol[];    // All extracted symbols
+  files: FileMeta[];    // File metadata for incremental updates
+  languages: string[];  // ["typescript", "python"]
+}
+
+interface Symbol {
+  name: string;         // Symbol name
+  type: 'function' | 'class' | 'interface' | 'import' | 'export';
+  file: string;         // Relative path
+  line: number;         // 1-based line number
+  column: number;       // 0-based column
+  kind: 'def' | 'ref';  // Definition or reference
+  language: string;     // "typescript" | "python"
+}
+
+interface FileMeta {
+  path: string;
+  mtime: number;        // Milliseconds timestamp
+  hash: string;         // SHA256 (first 16 chars)
+  size: number;         // Bytes
+  language: string;
+}
+```
+
+### 3. Query Syntax
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `def:name` | Find definitions | `def:calculateTotal` |
+| `ref:name` | Find references | `ref:formatDate` |
+| `class:name` | Find class definitions | `class:UserService` |
+| `function:name` | Find function definitions | `function:authenticate` |
+| `name` | Search all symbols | `apiClient` |
+
+### 4. Language Configuration
+
+Current supported languages:
+
+```typescript
+// TypeScript/JavaScript
+{
+  name: 'typescript',
+  extensions: ['.ts', '.tsx', '.js', '.jsx'],
+  nodeTypes: {
+    functionDef: ['function_declaration', 'function', 'arrow_function'],
+    classDef: ['class_declaration', 'class'],
+    importDef: ['import_statement', 'import_specifier'],
+    callExpr: ['call_expression']
+  }
+}
+
+// Python
+{
+  name: 'python',
+  extensions: ['.py'],
+  nodeTypes: {
+    functionDef: ['function_definition'],
+    classDef: ['class_definition'],
+    importDef: ['import_statement', 'import_from_statement'],
+    callExpr: ['call']
+  }
+}
+```
+
+### 5. Adding New Languages
+
+To extend with a new language (e.g., Go):
+
+```typescript
+// 1. Install parser
+npm install tree-sitter-go
+
+// 2. Import in indexer.ts
+import Go from 'tree-sitter-go';
+
+// 3. Add to languages array
+{
+  name: 'go',
+  extensions: ['.go'],
+  parser: Go,
+  nodeTypes: {
+    functionDef: ['function_declaration', 'method_declaration'],
+    classDef: ['type_declaration'], // Go uses type for structs
+    importDef: ['import_declaration'],
+    callExpr: ['call_expression']
+  }
+}
+
+// 4. Update tests
+// 5. Build and verify
+```
+
+### 6. Performance Characteristics
+
+- **First Index**: O(n) where n = total lines of code
+- **Incremental Update**: O(m) where m = changed files only
+- **Search**: O(s) where s = number of symbols (in-memory)
+- **Memory**: ~50KB per 1000 symbols
+
+Typical speeds:
+- 10k LOC project: ~100ms first index, ~5ms incremental
+- 100k LOC project: ~1s first index, ~10ms incremental
+
+### 7. Integration Patterns
+
+#### As a Library
+```typescript
+import { buildIndex, search } from 'codesearch';
+
+// In your tool/agent
+async function analyzeProject(path: string) {
+  await buildIndex(path);
+  const functions = search(path, 'function:');
+  return functions.filter(f => f.kind === 'def');
+}
+```
+
+#### CLI Integration
+```bash
+# Shell out from agent
+cd /target/project && codesearch build
+result=$(codesearch "def:main")
+```
+
+### 8. Error Handling
+
+Common issues:
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| "No index found" | First run | Run `build` first |
+| Parse errors | Unsupported syntax | Check language version |
+| Empty results | Wrong query | Try simpler search |
+
+### 9. Testing
+
+```bash
+# Run all tests
+npm test
+
+# Run specific test file
+npx vitest tests/python.test.ts
+
+# Watch mode
+npx vitest --watch
+```
+
+### 10. Architecture Notes
+
+**Indexer Pipeline:**
+1. Discover files (glob)
+2. Check mtime/hash vs existing index
+3. Parse changed files (tree-sitter)
+4. Extract symbols (AST traversal)
+5. Merge with existing symbols
+6. Write updated index
+
+**Search Pipeline:**
+1. Load index from `.cindex/index.json`
+2. Parse query (prefix:name or just name)
+3. Filter symbols by type/kind/name
+4. Deduplicate by location
+5. Format output
+
+## Files to Know
+
+| File | Purpose |
+|------|---------|
+| `src/indexer.ts` | Core indexing logic, language configs |
+| `src/search.ts` | Query parsing, symbol filtering |
+| `src/index.ts` | CLI entry point |
+| `tests/indexer.test.ts` | TypeScript tests + incremental tests |
+| `tests/python.test.ts` | Python-specific tests |
+| `package.json` | Dependencies, scripts |
+
+## Common Tasks
+
+### Add a test
+```typescript
+// In tests/*.test.ts
+it('should do something', async () => {
+  await buildIndex(TEST_DIR);
+  const result = search(TEST_DIR, 'query');
+  expect(result).toContain(expected);
+});
+```
+
+### Debug indexing
+```bash
+# Enable verbose output
+DEBUG=codesearch npm start -- build
+
+# Check index content
+cat .cindex/index.json | jq '.symbols[0:5]'
+```
+
+### Update dependencies
+```bash
+npm update
+npm test  # Always test after updates
+```
+
+## Questions?
+
+See README.md for user-facing docs.  
+Check tests/ for usage examples.  
+Review src/indexer.ts for implementation details.
