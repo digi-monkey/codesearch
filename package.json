@@ -1,0 +1,37 @@
+{
+  "name": "codesearch",
+  "version": "0.3.0",
+  "description": "Lightweight code search tool with AST understanding",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest --run"
+  },
+  "keywords": [
+    "code-search",
+    "ast",
+    "tree-sitter"
+  ],
+  "author": "Xiaohei_404",
+  "license": "MIT",
+  "dependencies": {
+    "@types/glob": "^8.1.0",
+    "commander": "^12.0.0",
+    "glob": "^13.0.0",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0",
+    "vitest": "^4.0.18"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
